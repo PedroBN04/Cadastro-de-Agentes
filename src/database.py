@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 class DataEngine:
+    # Gerencia a persistencia de dados e regras de negocio
     def __init__(self):
         self.base_path = Path(__file__).resolve().parent
         self.data_dir = self.base_path.parent / "data"
@@ -13,9 +14,11 @@ class DataEngine:
         self._bootstrap_database()
 
     def _get_connection(self):
+        # Retorna conexao com o banco SQLite local
         return sqlite3.connect(str(self.db_path))
 
     def _bootstrap_database(self):
+        # Inicializa as tabelas do sistema e o catalogo de agentes se nao existirem
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
@@ -48,11 +51,12 @@ class DataEngine:
             conn.commit()
 
     def obter_agentes(self):
+        # Recupera a lista de agentes cadastrados no catalogo
         with self._get_connection() as conn:
             return pd.read_sql_query("SELECT * FROM agentes", conn)
 
     def registrar_requisicao(self, cliente, agente_id, descricao):
-        # Vocabulario expandido para garantir acuracia no match
+        # Mapeamento estendido para analise textual e calculo de SLA
         keywords_map = {
             101: ['texto', 'linguagem', 'escrever', 'traduzir', 'documento', 'resumir', 'redigir', 'ler'],
             102: ['dados', 'prever', 'analise', 'modelo', 'estatistica', 'tendencia', 'sql', 'preditivo', 'demanda'],
@@ -62,11 +66,11 @@ class DataEngine:
         texto_usuario = descricao.lower()
         matches = sum(1 for word in keywords_map.get(agente_id, []) if word in texto_usuario)
         
-        # Nova logica de pontuacao justa
+        # Logica de pontuacao baseada na aderencia estrutural do prompt
         if matches == 0:
-            final_score = random.uniform(10.0, 35.0)  # Incompativel (Erro critico)
+            final_score = random.uniform(10.0, 35.0)  # Incompativel (Erro critico de roteamento)
         elif matches == 1:
-            final_score = random.uniform(75.0, 85.0)  # Compativel (Bom desempenho)
+            final_score = random.uniform(75.0, 85.0)  # Compativel parcial (Desempenho aceitavel)
         else:
             final_score = random.uniform(86.0, 100.0) # Alta compatibilidade (Desempenho otimo)
             
@@ -81,6 +85,7 @@ class DataEngine:
             conn.commit()
 
     def obter_metrics_dash(self):
+        # Extrai logs formatados unindo as tabelas para visualizacao no dashboard
         query = '''
             SELECT a.nome, a.especialidade, s.cliente_nome, s.descricao_task, s.score_desempenho, s.data_timestamp
             FROM solicitacoes s
@@ -90,7 +95,13 @@ class DataEngine:
         with self._get_connection() as conn:
             return pd.read_sql_query(query, conn)
 
+    def obter_solicitacoes_raw(self):
+        # Retorna a tabela bruta de solicitacoes para auditoria do desenvolvedor
+        with self._get_connection() as conn:
+            return pd.read_sql_query("SELECT * FROM solicitacoes", conn)
+
     def limpar_historico(self):
+        # Exclui os dados transacionais mantendo o catalogo de agentes
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM solicitacoes")
