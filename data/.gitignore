@@ -1,0 +1,12 @@
+# Ignorar arquivos de banco de dados SQLite
+*.db
+*.sqlite3
+
+# Ignorar pastas de cache do Python
+__pycache__/
+*.pyc
+.DS_Store
+
+# Ignorar ambientes virtuais 
+venv/
+env/
