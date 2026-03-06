@@ -7,8 +7,8 @@ from pathlib import Path
 class DataEngine:
     # Gerencia a persistencia de dados e regras de negocio
     def __init__(self):
-        self.base_path = Path(__file__).resolve().parent
-        self.data_dir = self.base_path.parent / "data"
+        self.root_path = Path.cwd()
+        self.data_dir = self.root_path / "data"
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.db_path = self.data_dir / "Agentes.db"
         self._bootstrap_database()
