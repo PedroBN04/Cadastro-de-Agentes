@@ -10,7 +10,7 @@ engine = DataEngine()
 
 # Barra lateral de opcoes para desenvolvedores/administradores
 with st.sidebar:
-    st.header("Opcoes de Desenvolvedor")
+    st.header("Opcoes de Sistema")
     
     mostrar_banco = st.toggle("Inspecionar Banco (Raw Data)")
     st.divider()
@@ -25,10 +25,14 @@ with st.sidebar:
 st.title("Squad de IA: Prototipo de Fluxo de Dados")
 st.markdown("---")
 
-# Divisao em abas para separacao de contexto de usuario
-tab_cliente, tab_dashboard = st.tabs(["Portal de Requisicoes", "Dashboard de Performance"])
+# Divisao em abas para separacao de contexto
+tab_cliente, tab_dev, tab_dashboard = st.tabs([
+    "Portal de Requisicoes", 
+    "Portal do Desenvolvedor", 
+    "Dashboard de Performance"
+])
 
-# Interface de Entrada de Dados (Mapeamento do Quadro Verde)
+# Interface de Entrada de Dados (Quadro Verde)
 with tab_cliente:
     st.header("Area do Cliente")
     with st.container(border=True):
@@ -54,13 +58,36 @@ with tab_cliente:
                 else:
                     st.error("Preencha todos os campos obrigatorios.")
 
+# Interface de Gerenciamento de Catalogo (Novo Recurso)
+with tab_dev:
+    st.header("Cadastro de Novos Agentes")
+    with st.container(border=True):
+        col_dev1, col_dev2 = st.columns(2)
+        
+        with col_dev1:
+            nome_dev = st.text_input("Nome do Desenvolvedor / Equipe")
+            nome_agente = st.text_input("Nome do Agente (Ex: Agente Delta)")
+            
+        with col_dev2:
+            funcao_agente = st.text_input("Funcao ou Especialidade")
+            palavras_chave = st.text_area("Palavras-chave (separadas por virgula)", height=68, help="Essas palavras serao usadas pelo motor para calcular a aderencia do prompt.")
+            
+        if st.button("Registrar Novo Agente", type="primary"):
+            if nome_dev and nome_agente and funcao_agente and palavras_chave:
+                engine.registrar_agente(nome_dev, nome_agente, funcao_agente, palavras_chave)
+                st.success(f"{nome_agente} registrado com sucesso. Atualizando catalogo...")
+                time.sleep(1.5)
+                st.rerun()
+            else:
+                st.error("Preencha todos os dados para registrar o agente.")
+
 # Interface de Saida e Analise
 with tab_dashboard:
     st.header("Monitoramento Analitico")
     df = engine.obter_metrics_dash()
     
     if not df.empty:
-        # Metricas consolidadas (KPIs executivos)
+        # Metricas consolidadas
         c1, c2, c3 = st.columns(3)
         c1.metric("Total de Ativacoes", len(df))
         c2.metric("SLA Medio da Squad", f"{df['score_desempenho'].mean():.2f}%")
@@ -69,7 +96,7 @@ with tab_dashboard:
 
         st.divider()
 
-        # Visualizacao grafica de desempenho e rastreamento de desvios
+        # Visualizacao grafica de desempenho
         st.subheader("Eficiencia por Agente e Ativacao")
         fig = px.bar(
             df, 
@@ -77,7 +104,7 @@ with tab_dashboard:
             y='score_desempenho', 
             color='nome',
             hover_data=['cliente_nome', 'descricao_task'],
-            labels={'score_desempenho': 'Eficiencia (%)', 'data_timestamp': 'Horario da Requisicao', 'nome': 'Especialista'},
+            labels={'score_desempenho': 'Eficiencia (%)', 'data_timestamp': 'Horario', 'nome': 'Especialista'},
             template="plotly_dark",
             text='score_desempenho'
         )
@@ -89,7 +116,7 @@ with tab_dashboard:
 
         st.divider()
 
-        # Tabela formatada de historico auditavel
+        # Tabela formatada de historico
         st.subheader("Rastreamento de Log Tratado")
         st.dataframe(
             df,
@@ -106,17 +133,14 @@ with tab_dashboard:
 # Inspecao estrutural do banco de dados (Visao Desenvolvedor)
 if mostrar_banco:
     st.markdown("---")
-    st.header("Inspecao do Banco de Dados")
-    st.caption("Visao das tabelas fisicas armazenadas no SQLite para auditoria de persistencia relacional.")
+    st.header("Inspecao do Banco de Dados (Raw Data)")
+    st.caption("Visao das tabelas fisicas armazenadas no SQLite para auditoria.")
     
-    col_db1, col_db2 = st.columns(2)
-    with col_db1:
-        st.subheader("Tabela: agentes")
-        st.dataframe(engine.obter_agentes(), use_container_width=True)
+    st.subheader("Tabela: agentes")
+    st.dataframe(engine.obter_agentes(), use_container_width=True)
         
-    with col_db2:
-        st.subheader("Tabela: solicitacoes")
-        st.dataframe(engine.obter_solicitacoes_raw(), use_container_width=True)
+    st.subheader("Tabela: solicitacoes")
+    st.dataframe(engine.obter_solicitacoes_raw(), use_container_width=True)
 
 # Polling automatico ativado apenas se a visualizacao de inspecao estiver desativada
 if not mostrar_banco:

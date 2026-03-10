@@ -7,6 +7,7 @@ from pathlib import Path
 class DataEngine:
     # Gerencia a persistencia de dados e regras de negocio
     def __init__(self):
+        # Utiliza o diretorio atual (raiz do projeto) como base
         self.root_path = Path.cwd()
         self.data_dir = self.root_path / "data"
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -21,11 +22,15 @@ class DataEngine:
         # Inicializa as tabelas do sistema e o catalogo de agentes se nao existirem
         with self._get_connection() as conn:
             cursor = conn.cursor()
+            
+            # Tabela atualizada com desenvolvedor e palavras_chave
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS agentes (
-                    id INTEGER PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    desenvolvedor TEXT NOT NULL,
                     nome TEXT NOT NULL,
-                    especialidade TEXT NOT NULL
+                    especialidade TEXT NOT NULL,
+                    palavras_chave TEXT NOT NULL
                 )
             ''')
             cursor.execute('''
@@ -40,14 +45,25 @@ class DataEngine:
                 )
             ''')
             
+            # Carga inicial dinamica caso o banco esteja vazio
             cursor.execute("SELECT COUNT(*) FROM agentes")
             if cursor.fetchone()[0] == 0:
-                agentes = [
-                    (101, 'Agente Alpha', 'Processamento de Linguagem Natural e Traducao'),
-                    (102, 'Agente Beta', 'Analise Preditiva e Modelagem de Dados'),
-                    (103, 'Agente Gamma', 'Auditoria de Seguranca e Conformidade Digital')
+                agentes_default = [
+                    ('Sistema BIRD', 'Agente Alpha', 'Processamento de Linguagem Natural e Traducao', 'texto, linguagem, escrever, traduzir, documento, resumir, redigir, ler'),
+                    ('Sistema BIRD', 'Agente Beta', 'Analise Preditiva e Modelagem de Dados', 'dados, prever, analise, modelo, estatistica, tendencia, sql, preditivo, demanda'),
+                    ('Sistema BIRD', 'Agente Gamma', 'Auditoria de Seguranca e Conformidade Digital', 'seguranca, lgpd, auditoria, conformidade, acesso, vulnerabilidade, senha, protecao')
                 ]
-                cursor.executemany("INSERT INTO agentes VALUES (?, ?, ?)", agentes)
+                cursor.executemany("INSERT INTO agentes (desenvolvedor, nome, especialidade, palavras_chave) VALUES (?, ?, ?, ?)", agentes_default)
+            conn.commit()
+
+    def registrar_agente(self, desenvolvedor, nome, especialidade, palavras_chave):
+        # Insere um novo agente no catalogo dinamico
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO agentes (desenvolvedor, nome, especialidade, palavras_chave)
+                VALUES (?, ?, ?, ?)
+            ''', (desenvolvedor, nome, especialidade, palavras_chave))
             conn.commit()
 
     def obter_agentes(self):
@@ -56,15 +72,22 @@ class DataEngine:
             return pd.read_sql_query("SELECT * FROM agentes", conn)
 
     def registrar_requisicao(self, cliente, agente_id, descricao):
-        # Mapeamento estendido para analise textual e calculo de SLA
-        keywords_map = {
-            101: ['texto', 'linguagem', 'escrever', 'traduzir', 'documento', 'resumir', 'redigir', 'ler'],
-            102: ['dados', 'prever', 'analise', 'modelo', 'estatistica', 'tendencia', 'sql', 'preditivo', 'demanda'],
-            103: ['seguranca', 'lgpd', 'auditoria', 'conformidade', 'acesso', 'vulnerabilidade', 'senha', 'protecao']
-        }
-        
+        # Busca as palavras-chave do agente especifico direto no banco de dados
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT palavras_chave FROM agentes WHERE id = ?", (agente_id,))
+            resultado = cursor.fetchone()
+            
+        if resultado:
+            # Transforma a string do banco (separada por virgula) em uma lista limpa
+            palavras_db = [p.strip().lower() for p in resultado[0].split(',')]
+        else:
+            palavras_db = []
+            
         texto_usuario = descricao.lower()
-        matches = sum(1 for word in keywords_map.get(agente_id, []) if word in texto_usuario)
+        
+        # Cruza as palavras do banco com o texto do usuario
+        matches = sum(1 for word in palavras_db if word in texto_usuario)
         
         # Logica de pontuacao baseada na aderencia estrutural do prompt
         if matches == 0:
