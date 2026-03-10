@@ -1,13 +1,14 @@
 import sqlite3
 import pandas as pd
 import random
+import difflib
 from datetime import datetime
 from pathlib import Path
 
 class DataEngine:
-    # Gerencia a persistencia de dados e regras de negocio
+    # Gerencia a persistencia de dados, regras de negocio e simulacao de roteamento cognitivo
     def __init__(self):
-        # Utiliza o diretorio atual (raiz do projeto) como base
+        # Utiliza o diretorio raiz do projeto como base absoluta para evitar subpastas
         self.root_path = Path.cwd()
         self.data_dir = self.root_path / "data"
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -15,15 +16,15 @@ class DataEngine:
         self._bootstrap_database()
 
     def _get_connection(self):
-        # Retorna conexao com o banco SQLite local
+        # Retorna a conexao com o banco de dados relacional (SQLite local)
         return sqlite3.connect(str(self.db_path))
 
     def _bootstrap_database(self):
-        # Inicializa as tabelas do sistema e o catalogo de agentes se nao existirem
+        # Inicializa a modelagem de tabelas e aplica a carga de dados default se necessario
         with self._get_connection() as conn:
             cursor = conn.cursor()
             
-            # Tabela atualizada com desenvolvedor e palavras_chave
+            # Tabela de dimensionamento (Catalogo de Especialistas)
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS agentes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,6 +34,8 @@ class DataEngine:
                     palavras_chave TEXT NOT NULL
                 )
             ''')
+            
+            # Tabela de fatos (Transacoes e Logs de Roteamento)
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS solicitacoes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,19 +48,19 @@ class DataEngine:
                 )
             ''')
             
-            # Carga inicial dinamica caso o banco esteja vazio
+            # Populacao inicial dinamica do ambiente
             cursor.execute("SELECT COUNT(*) FROM agentes")
             if cursor.fetchone()[0] == 0:
                 agentes_default = [
-                    ('Sistema BIRD', 'Agente Alpha', 'Processamento de Linguagem Natural e Traducao', 'texto, linguagem, escrever, traduzir, documento, resumir, redigir, ler'),
-                    ('Sistema BIRD', 'Agente Beta', 'Analise Preditiva e Modelagem de Dados', 'dados, prever, analise, modelo, estatistica, tendencia, sql, preditivo, demanda'),
-                    ('Sistema BIRD', 'Agente Gamma', 'Auditoria de Seguranca e Conformidade Digital', 'seguranca, lgpd, auditoria, conformidade, acesso, vulnerabilidade, senha, protecao')
+                    ('Sistema Base', 'Agente Alpha', 'Processamento de Linguagem Natural', 'texto, linguagem, escrever, traduzir, documento, resumir, redigir, ler'),
+                    ('Sistema Base', 'Agente Beta', 'Analise Preditiva e Modelagem de Dados', 'dados, prever, analise, modelo, estatistica, tendencia, sql, preditivo, demanda'),
+                    ('Sistema Base', 'Agente Gamma', 'Auditoria de Seguranca Digital', 'seguranca, lgpd, auditoria, conformidade, acesso, vulnerabilidade, senha, protecao')
                 ]
                 cursor.executemany("INSERT INTO agentes (desenvolvedor, nome, especialidade, palavras_chave) VALUES (?, ?, ?, ?)", agentes_default)
             conn.commit()
 
     def registrar_agente(self, desenvolvedor, nome, especialidade, palavras_chave):
-        # Insere um novo agente no catalogo dinamico
+        # Persiste um novo perfil de especialista integrado pelo Portal do Desenvolvedor
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
@@ -67,38 +70,51 @@ class DataEngine:
             conn.commit()
 
     def obter_agentes(self):
-        # Recupera a lista de agentes cadastrados no catalogo
+        # Retorna o dataframe do catalogo ativo para popular as interfaces (Frontend)
         with self._get_connection() as conn:
             return pd.read_sql_query("SELECT * FROM agentes", conn)
 
     def registrar_requisicao(self, cliente, agente_id, descricao):
-        # Busca as palavras-chave do agente especifico direto no banco de dados
+        # Extrai as regras de roteamento diretamente da base de dados
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT palavras_chave FROM agentes WHERE id = ?", (agente_id,))
             resultado = cursor.fetchone()
             
         if resultado:
-            # Transforma a string do banco (separada por virgula) em uma lista limpa
+            # Tratamento de string: divide por virgula e remove espacos/maiusculas
             palavras_db = [p.strip().lower() for p in resultado[0].split(',')]
         else:
             palavras_db = []
             
-        texto_usuario = descricao.lower()
+        # Normaliza o input do usuario para a validacao semantica
+        texto_usuario = descricao.lower().split()
+        forca_conexao = 0.0
         
-        # Cruza as palavras do banco com o texto do usuario
-        matches = sum(1 for word in palavras_db if word in texto_usuario)
+        # Algoritmo de Similaridade Cognitiva (NLP Leve)
+        for palavra_chave in palavras_db:
+            
+            # 1. Busca de Radical (Stemming): valida substrings comuns ("analisar" vs "analise")
+            if any(palavra_chave in word or word in palavra_chave for word in texto_usuario):
+                forca_conexao += 1.0
+                continue
+                
+            # 2. Busca Fuzzy (Distancia de Levenshtein): tolerancia a erros de digitacao tipograficos
+            similares = difflib.get_close_matches(palavra_chave, texto_usuario, n=1, cutoff=0.75)
+            if similares:
+                forca_conexao += 0.8  # Peso reduzido por ser uma inferencia probabilistica
         
-        # Logica de pontuacao baseada na aderencia estrutural do prompt
-        if matches == 0:
-            final_score = random.uniform(10.0, 35.0)  # Incompativel (Erro critico de roteamento)
-        elif matches == 1:
-            final_score = random.uniform(75.0, 85.0)  # Compativel parcial (Desempenho aceitavel)
+        # Atribuicao do nivel de servico (SLA) via forca conectiva
+        if forca_conexao == 0:
+            final_score = random.uniform(10.0, 39.0)  # Roteamento incorreto (Falha Critica)
+        elif forca_conexao < 1.5:
+            final_score = random.uniform(60.0, 84.0)  # Roteamento aceitavel (Aderencia Parcial)
         else:
-            final_score = random.uniform(86.0, 100.0) # Alta compatibilidade (Desempenho otimo)
+            final_score = random.uniform(85.0, 100.0) # Roteamento ideal (Alta Aderencia)
             
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
+        # Persistencia do log transacional da avaliacao
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
@@ -108,7 +124,7 @@ class DataEngine:
             conn.commit()
 
     def obter_metrics_dash(self):
-        # Extrai logs formatados unindo as tabelas para visualizacao no dashboard
+        # View analitica: JOIN entre transacoes e catalogo para injecao no Dashboard
         query = '''
             SELECT a.nome, a.especialidade, s.cliente_nome, s.descricao_task, s.score_desempenho, s.data_timestamp
             FROM solicitacoes s
@@ -119,12 +135,12 @@ class DataEngine:
             return pd.read_sql_query(query, conn)
 
     def obter_solicitacoes_raw(self):
-        # Retorna a tabela bruta de solicitacoes para auditoria do desenvolvedor
+        # Extrai os dados brutos da tabela de fatos para auditoria no Modo Desenvolvedor
         with self._get_connection() as conn:
             return pd.read_sql_query("SELECT * FROM solicitacoes", conn)
 
     def limpar_historico(self):
-        # Exclui os dados transacionais mantendo o catalogo de agentes
+        # Trunca a tabela de transacoes sem afetar a integridade do catalogo de agentes
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM solicitacoes")
